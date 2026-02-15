@@ -1,6 +1,11 @@
 import { Composition, staticFile } from "remotion";
 import { Scene, myCompSchema } from "./Scene";
 import { getMediaMetadata } from "./helpers/get-media-metadata";
+import { HydraulicAxis01 } from "./videos/firstvideo/HydraulicAxis01";
+import { CylinderPreview } from "./videos/firstvideo/CylinderPreview";
+import { HydraulicSystem } from "./videos/firstvideo/scenes/HydraulicSystem";
+import { NumberPlaneDemo } from "./videos/firstvideo/components/NumberPlaneDemo";
+import { CameraDemo } from "./videos/firstvideo/components/CameraDemo";
 
 // Welcome to the Remotion Three Starter Kit!
 // Two compositions have been created, showing how to use
@@ -23,8 +28,8 @@ export const RemotionRoot: React.FC = () => {
       <Composition
         id="Scene"
         component={Scene}
-        fps={30}
         durationInFrames={300}
+        fps={30}
         width={1280}
         height={720}
         schema={myCompSchema}
@@ -51,6 +56,46 @@ export const RemotionRoot: React.FC = () => {
             },
           };
         }}
+      />
+      <Composition
+        id="HydraulicAxis01"
+        component={HydraulicAxis01}
+        durationInFrames={300}
+        fps={30}
+        width={1920}
+        height={1080}
+      />
+      <Composition
+        id="CylinderPreview"
+        component={CylinderPreview}
+        durationInFrames={960}
+        fps={60}
+        width={1920}
+        height={1080}
+      />
+      <Composition
+        id="HydraulicSystem"
+        component={HydraulicSystem}
+        durationInFrames={600}
+        fps={60}
+        width={1920}
+        height={1080}
+      />
+      <Composition
+        id="NumberPlaneDemo"
+        component={NumberPlaneDemo}
+        durationInFrames={600}
+        fps={60}
+        width={1920}
+        height={1080}
+      />
+      <Composition
+        id="CameraDemo"
+        component={CameraDemo}
+        durationInFrames={600}
+        fps={60}
+        width={1920}
+        height={1080}
       />
     </>
   );

@@ -6,17 +6,20 @@
   "license": "UNLICENSED",
   "private": true,
   "dependencies": {
-    "@react-three/fiber": "9.2.0",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.2.0",
     "@remotion/cli": "4.0.422",
     "@remotion/media": "4.0.422",
     "@remotion/three": "4.0.422",
     "@remotion/zod-types": "4.0.422",
+    "katex": "^0.16.28",
+    "mathbox": "^2.3.2-rc1",
+    "mediabunny": "1.29.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "remotion": "4.0.422",
-    "three": "0.178.0",
-    "zod": "3.22.3",
-    "mediabunny": "1.29.0"
+    "three": "^0.178.0",
+    "zod": "3.22.3"
   },
   "devDependencies": {
     "@remotion/eslint-config-flat": "4.0.422",
