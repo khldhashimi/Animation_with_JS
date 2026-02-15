@@ -3,8 +3,10 @@ import React from "react";
 import { AbsoluteFill, interpolate, Easing, useCurrentFrame } from "remotion";
 import { HydraulicCylinder2D } from "./components/HydraulicCylinder2D";
 import { MouseCoordinateOverlay } from "./components/MouseCoordinateOverlay";
+import { Camera2D } from "./components/Camera2D";
+import { CurvedArrow } from "./components/CurvedArrow";
 import { ServoValve2D } from "./components/ServoValve2D";
-import { MathBoxPlot } from "./components/MathBoxPlot";
+import { NumberPlane2D } from "./components/NumberPlane2D";
 import { VerticalColorBar } from "./components/VerticalColorBar";
 import { HydraulicLines } from "./components/HydraulicLines";
 
@@ -51,58 +53,159 @@ export const CylinderPreview: React.FC = () => {
     // Center of interest: ~ (300, 600) maybe? Cylinder is width 600, height 200.
     // At scale 2.5, we need to shift the view.
 
+    // --- Camera State Configuration ---
+    const sceneWidth = 1920;
+    const sceneHeight = 1080;
+
     const zoomStart = 600;
     const zoomDuration = 60;
+    const zoomEnd = zoomStart + zoomDuration;
 
-    const scale = interpolate(
-        frame,
-        [zoomStart, zoomStart + zoomDuration],
-        [1, 2.8], // Zoom level
-        { extrapolateRight: "clamp", easing: Easing.inOut(Easing.ease) }
-    );
+    // Initial View: Full Scene
+    const initialState = {
+        centerX: sceneWidth / 2,
+        centerY: sceneHeight / 2,
+        width: sceneWidth,
+        height: sceneHeight,
+    };
 
-    const translateX = interpolate(
-        frame,
-        [zoomStart, zoomStart + zoomDuration],
-        [0, 600], // Shift right to bring left side to center? No, we want to move the scene LEFT.
-        // Wait, positive translate moves the scene right. If we want to focus on (50, 500), we need to move it towards center (1920/2, 1080/2).
-        // Let's rely on visual adjustment or calculation.
-        // Initial Center: (960, 540)
-        // Target Center: (350, 600) (Approximate middle of cylinder area)
-        // Delta: (960-350, 540-600) * scale?
-        // Let's try explicit values.
-        { extrapolateRight: "clamp", easing: Easing.inOut(Easing.ease) }
-    );
+    // Target View: Zoomed in on Cylinder (x=50, y=500, w=600, h=200)
+    // We want to center roughly at (350, 600) with a zoom of ~2.8
+    // Calculate target width based on zoom level
+    const targetZoom = 2.8;
+    const targetWidth = sceneWidth / targetZoom;
+    const targetHeight = sceneHeight / targetZoom;
 
-    const translateY = interpolate(
-        frame,
-        [zoomStart, zoomStart + zoomDuration],
-        [0, -400], // Move up to center the cylinder vertically
-        { extrapolateRight: "clamp", easing: Easing.inOut(Easing.ease) }
-    );
+    const targetState = {
+        centerX: 350, // Approx center of cylinder area
+        centerY: 544,
+        width: targetWidth,
+        height: targetHeight
+    };
+
+    // --- Developer Overlay Logic --- 
+    // Replicate interpolation for MouseOverlay correctness without depending on Camera2D internals
+    // Camera2D uses Easing.inOut(Easing.quad) by default for "easeInOut"
+    const currentCameraState = {
+        centerX: interpolate(frame, [zoomStart, zoomEnd], [initialState.centerX, targetState.centerX], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.inOut(Easing.quad) }),
+        centerY: interpolate(frame, [zoomStart, zoomEnd], [initialState.centerY, targetState.centerY], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.inOut(Easing.quad) }),
+        width: interpolate(frame, [zoomStart, zoomEnd], [initialState.width, targetState.width], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.inOut(Easing.quad) }),
+        height: interpolate(frame, [zoomStart, zoomEnd], [initialState.height, targetState.height], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.inOut(Easing.quad) }),
+    };
 
     return (
         <AbsoluteFill style={{ backgroundColor: "black" }}>
-            <AbsoluteFill
-                style={{
-                    transform: `scale(${scale}) translate(${translateX}px, ${translateY}px)`,
-                    transformOrigin: "center center", // Or top left? Center implies zooming into the center of the frame.
-                    // If we zoom into center, we just need to translate the target point to the center.
-                }}
+            <Camera2D
+                startFrame={zoomStart}
+                endFrame={zoomEnd}
+                initialState={initialState}
+                targetState={targetState}
+                sceneWidth={sceneWidth}
+                sceneHeight={sceneHeight}
+                easing="easeInOut"
             >
-                {/* --- Live Graph --- */}
-                <MathBoxPlot
-                    width={600}
-                    height={500}
-                    x={1300}
-                    y={graphY}
-                    getValueAtFrame={getPistonPos}
-                    title="Cylinder Rod Position"
-                    yMin={0}
-                    yMax={1}
-                    totalFrames={600}
-                    fps={60}
-                />
+                {/* --- Live Graph using NumberPlane2D --- */}
+                {(() => {
+                    const graphWidth = 600;
+                    const graphHeight = 500;
+                    const graphX = 1300;
+                    // graphY is already defined in scope: interpolate(...) 
+
+                    // 1. Generate Data
+                    const timeData: number[] = [];
+                    const posData: number[] = [];
+                    // We need points from 0 to current frame
+                    // Total duration 10s (600 frames).
+                    // Step size: 1 frame is fine for 600 points (performance wise ok for small arrays).
+                    const maxGraphFrame = 600;
+                    const currentGraphFrame = Math.min(frame, maxGraphFrame);
+
+                    for (let f = 0; f <= currentGraphFrame; f++) {
+                        const t = f / 60; // 60fps
+                        const v = getPistonPos(f);
+                        timeData.push(t);
+                        posData.push(v);
+                    }
+
+                    // 2. Calculate Tip Position (for dot and readout)
+                    // Replicate NumberPlane2D mapping logic
+                    // Default padding is 20
+                    const padding = 60; // MathBox had generous padding: { top: 50, right: 30, bottom: 60, left: 80 }
+                    // Let's use custom padding logic or just adapt NumberPlane2D padding.
+                    // NumberPlane2D uses uniform padding. Let's stick to uniform 40 for now or pass padding.
+                    // To match MathBoxPlot look exactly, we might need more control, but uniform is generic.
+
+                    const xMin = 0;
+                    const xMax = 10; // 600 frames / 60 fps
+                    const yMin = 0;
+                    const yMax = 1;
+
+                    // Current values
+                    const currentVal = getPistonPos(currentGraphFrame);
+
+                    return (
+                        <div style={{ position: "absolute", left: graphX, top: graphY, width: graphWidth, height: graphHeight }}>
+                            <NumberPlane2D
+                                x={0}
+                                y={0}
+                                width={graphWidth}
+                                height={graphHeight}
+                                xRange={[xMin, xMax]}
+                                yRange={[yMin, yMax]}
+                                xValues={timeData}
+                                yValues={[posData]}
+                                title="Cylinder Rod Position"
+                                showTitle={true}
+                                titleColor="#f1f5f9"
+                                titleFontSize={22}
+                                titleDx={-graphWidth / 2 + 20 + 120} // Align Left-ish like MathBox? MathBox title was x=pad.left+6 (approx 86). Center is 300. -300+86 = -214.
+                                // NumberPlane2D title is centered by default.
+                                // Let's just let it center efficiently or accept it.
+
+                                grid={{
+                                    showGrid: true,
+                                    majorColor: "rgba(255, 255, 255, 0.15)",
+                                    xMajorStep: 2, // 2s steps
+                                    yMajorStep: 0.2 // 0.2 steps
+                                }}
+
+                                xAxisConfig={{
+                                    axisColor: "rgba(226,232,240,0.8)",
+                                    numberColor: "#cbd5e1",
+                                    tickColor: "rgba(226,232,240,0.8)",
+                                    showTip: false
+                                }}
+                                yAxisConfig={{
+                                    axisColor: "rgba(226,232,240,0.8)",
+                                    numberColor: "#cbd5e1",
+                                    tickColor: "rgba(226,232,240,0.8)",
+                                    showTip: false,
+                                    numberPrecision: 2
+                                }}
+                                xLabel="Time [s]"
+                                yLabel="Position"
+                                backgroundFill="#000000ff" // Dark slate
+                                graphStyles={{
+                                    0: { strokeColor: "#38bdf8", strokeWidth: 4 }
+                                }}
+                                padding={padding}
+                            />
+
+                            {/* Custom Readout (Top Right) */}
+                            <div style={{
+                                position: "absolute",
+                                top: 28,
+                                right: padding,
+                                fontFamily: "monospace",
+                                fontSize: 24,
+                                fontWeight: "bold",
+                                color: "#38bdf8"
+                            }}>
+                                {currentVal.toFixed(3)}
+                            </div>
+                        </div>
+                    );
+                })()}
 
                 {/* --- Vertical Color Bar (Pressure/Simulated) --- */}
                 <VerticalColorBar
@@ -175,31 +278,41 @@ export const CylinderPreview: React.FC = () => {
                 <div style={{ position: "absolute", bottom: 40, color: "#aaa", fontSize: 14 }}>
                     (Industrial Design Style)
                 </div>
-            </AbsoluteFill>
-            {/* Dev Overlay */}
+
+                {/* Fading Arrow (Appears after 5 seconds = 300 frames) */}
+                {(() => {
+                    const arrowStartFrame = 300;
+                    const arrowOpacity = interpolate(
+                        frame,
+                        [arrowStartFrame, arrowStartFrame + 30], // 0.5s fade in
+                        [0, 1],
+                        { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+                    );
+
+                    if (frame < arrowStartFrame) return null;
+
+                    return (
+                        <CurvedArrow
+                            start={{ x: 200, y: 400 }}
+                            end={{ x: 350, y: 480 }}
+                            controlPoint={{ x: 250, y: 350 }}
+                            color="#00ffff"
+                            thickness={4}
+                            arrowSize={20}
+                            opacity={arrowOpacity}
+                        />
+                    );
+                })()}
+
+            </Camera2D>
+
+            {/* Dev Overlay - Placed outside Camera2D logic but fed with current camera state */}
             <MouseCoordinateOverlay
-                sceneWidth={1920}
-                sceneHeight={1080}
-                // We don't have active camera state tracking here efficiently exposed yet without context,
-                // but we can pass the zoom/pan values if we calculate them here or just pass static for now
-                // to show pixel coords at least.
-                // For dynamic camera support, we'd need to lift the interpolate logic to state or pass it in.
-                // For now, let's show pixel coords and default world (1:1).
-                /* 
-                 * To show "World" coords correctly during zoom, we need the CURRENT scale/translate.
-                 * calculated above as `scale`, `translateX`, `translateY`.
-                 * CenterX can be derived: 
-                 * translate = Width/2 - Center * Scale
-                 * Center * Scale = Width/2 - translate
-                 * Center = (Width/2 - translate) / Scale
-                 */
-                cameraState={{
-                    centerX: (1920 / 2 - translateX) / scale,
-                    centerY: (1080 / 2 - translateY) / scale, // Note: This assumes Y increases downwards (SVG default)
-                    width: 1920 / scale,
-                    height: 1080 / scale
-                }}
+                sceneWidth={sceneWidth}
+                sceneHeight={sceneHeight}
+                cameraState={currentCameraState}
             />
         </AbsoluteFill>
     );
 };
+
